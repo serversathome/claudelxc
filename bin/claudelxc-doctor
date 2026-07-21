@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# claudelxc-doctor - health check for the Claude Code container.
+# Exit 0 = healthy, non-zero = one or more checks failed.
+LOG_TAG="[doctor]"
+rc=0
+check() { if eval "$2" >/dev/null 2>&1; then echo "  OK   $1"; else echo "  FAIL $1"; rc=1; fi; }
+# note() is informational only — it never fails the health check. Used for
+# user-actionable states (like "not logged in yet") that aren't container faults.
+note()  { if eval "$2" >/dev/null 2>&1; then echo "  OK   $1"; else echo "  WARN $1"; fi; }
+
+echo "$LOG_TAG $(date '+%Y-%m-%d %H:%M:%S %Z')"
+check "claude binary present"       "command -v claude"
+check "claude reports a version"    "claude --version"
+note  "claude logged in (creds on disk; run 'claude' /login if WARN)" "test -s /root/.claude/.credentials.json"
+check "cloudcli service active"     "systemctl is-active --quiet cloudcli"
+check "UI listening on :3001"       "ss -ltn | grep -q ':3001'"
+check "docker daemon running"       "systemctl is-active --quiet docker"
+note  "claudelxc checkout present"  "test -d /opt/claudelxc/.git"
+check "disk under 90% on /"         "test $(df --output=pcent / | tail -1 | tr -dc 0-9) -lt 90"
+
+if [ $rc -eq 0 ]; then echo "$LOG_TAG all checks passed"; else echo "$LOG_TAG one or more checks FAILED"; fi
+exit $rc

@@ -1,0 +1,13 @@
+# claudelxc nightly auto-update. One command runs everything: claudelxc-update
+# pulls the latest claudelxc from the tracked branch (stable), re-runs the
+# idempotent converge to apply any provisioning changes, then refreshes the OS,
+# Claude Code, the CloudCLI UI, and container images, and finishes with a health
+# check. Output is appended to /var/log/claudelxc-update.log (tail it to see what
+# happened).
+#
+# The five time fields are: minute hour day-of-month month day-of-week.
+# Default below = every day at 04:00. Edit the line to change the schedule, or
+# delete this file to turn auto-update off entirely.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+0 4 * * * root /usr/local/bin/claudelxc-update

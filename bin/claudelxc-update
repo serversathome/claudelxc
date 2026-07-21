@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# claudelxc-update - the single maintenance command: bring EVERYTHING up to date
+# in one run. Runs nightly via /etc/cron.d/claudelxc, or on demand:
+#
+#   claudelxc-update
+#
+# What it does, in order:
+#   1. claudelxc itself - pull the latest deploy logic from the tracked branch
+#      (stable) and re-run the idempotent converge. This is what lets an
+#      improvement to the deployer reach an already-deployed box on its own.
+#   2. OS packages (apt).
+#   3. npm (latest), Claude Code, CloudCLI UI (latest).
+#   4. Container images (one-shot Watchtower).
+#   5. A health check (claudelxc-doctor).
+#
+# Deliberately NOT 'set -e': one component failing must not abort the rest or
+# truncate the log. Modeled on homelabhero's hh-update.
+set -uo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+CONF=/etc/claudelxc/install.conf
+LOG=/var/log/claudelxc-update.log
+exec >>"$LOG" 2>&1
+
+echo "==================================================================="
+echo ">>> claudelxc-update starting: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+
+conf_get() { [ -f "$1" ] && awk -F= -v k="$2" '$1==k{sub(/^[^=]*=/,"");gsub(/^[ "]+|[ "]+$/,"");print;exit}' "$1"; }
+
+CHECKOUT="$(conf_get "$CONF" CHECKOUT)"; CHECKOUT="${CHECKOUT:-/opt/claudelxc}"
+BRANCH="$(conf_get "$CONF" BRANCH)";     BRANCH="${BRANCH:-stable}"
+REPO="$(conf_get "$CONF" REPO)";         REPO="${REPO:-https://github.com/serversathome/claudelxc.git}"
+
+# --- 1. claudelxc itself: pull latest, then run the fresh converge. --------------
+# The converge is the single source of truth for in-container config; re-running
+# it lays down the newest settings/units/skills/tooling (managed files) while
+# leaving user state (creds, CloudCLI login, /project files) untouched.
+echo ">>> [1/6] claudelxc self-update (branch: $BRANCH)..."
+if command -v git >/dev/null 2>&1; then
+  if [ ! -d "$CHECKOUT/.git" ]; then
+    echo "    checkout $CHECKOUT missing; cloning $REPO ($BRANCH)"
+    rm -rf "$CHECKOUT"
+    git clone --depth 1 --branch "$BRANCH" "$REPO" "$CHECKOUT" \
+      || echo "    [WARN] clone failed (offline?); using whatever is on disk"
+  else
+    git -C "$CHECKOUT" fetch --depth 1 origin "$BRANCH" \
+      && git -C "$CHECKOUT" reset --hard "origin/${BRANCH}" \
+      || echo "    [WARN] git pull failed (offline?); re-applying the on-disk checkout"
+  fi
+else
+  echo "    [WARN] git not installed; skipping self-update, converge from on-disk copy"
+fi
+
+if [ -x "$CHECKOUT/guest/converge.sh" ]; then
+  echo "    running converge..."
+  "$CHECKOUT/guest/converge.sh" || echo "    [WARN] converge reported errors (see above)"
+else
+  echo "    [WARN] $CHECKOUT/guest/converge.sh not found; skipping converge"
+fi
+
+echo ">>> [2/6] OS packages (includes Node.js patches within its LTS line)..."
+apt-get update -qq && apt-get upgrade -y -qq && apt-get autoremove -y -qq && apt-get clean -qq
+
+echo ">>> [3/6] npm (latest)..."
+npm install -g --no-fund --no-audit --loglevel=error npm@latest || echo "    [WARN] npm self-update failed"
+
+echo ">>> [4/6] Claude Code + CloudCLI UI..."
+curl -fsSL https://claude.ai/install.sh | bash || echo "    [WARN] Claude Code update failed"
+npm install -g --no-fund --no-audit --loglevel=error @cloudcli-ai/cloudcli@latest || echo "    [WARN] CloudCLI UI update failed"
+systemctl restart cloudcli || echo "    [WARN] cloudcli restart failed"
+
+echo ">>> [5/6] Docker images (one-shot Watchtower)..."
+if command -v docker >/dev/null 2>&1 && [ -n "$(docker ps -q 2>/dev/null)" ]; then
+  docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+    containrrr/watchtower --run-once --cleanup \
+    || echo "    [WARN] Watchtower one-shot run failed"
+else
+  echo "    (no running containers; skipped)"
+fi
+
+echo ">>> [6/6] Health check..."
+if claudelxc-doctor; then
+  echo ">>> claudelxc-update finished OK: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+else
+  echo ">>> claudelxc-update finished WITH HEALTH-CHECK FAILURES: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+fi
+echo ""
