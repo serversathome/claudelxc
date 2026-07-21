@@ -135,10 +135,21 @@ fi
 CLAUDE_BIN="$(command -v claude || echo /usr/local/bin/claude)"
 echo "    Claude Code: $("$CLAUDE_BIN" --version 2>/dev/null || echo 'version unknown')"
 
-# ── Claude settings (MANAGED — overwritten every converge) ──────────────────
-log "Writing Claude settings (auto mode + deny floor)"
+# ── Claude settings (managed keys enforced; user additions preserved) ───────
+# Merge, don't clobber. The repo enforces the keys it owns (auto mode, the deny
+# floor, required env, the curated plugins, thinking) while preserving anything
+# the user added via the UI — their own enabled plugins, custom permission rules,
+# a statusLine, hooks, etc. A wholesale overwrite would silently disable a user's
+# own plugins on every nightly run (settings.json is where plugin-enabled state
+# lives). merge-settings.py tolerates a missing/empty/corrupt file by falling
+# back to the template, so a fresh box still gets the full managed config.
+log "Merging managed Claude settings (preserving user additions)"
 mkdir -p /root/.claude
-install -m 0644 "$TEMPLATES/settings.json" /root/.claude/settings.json
+if ! python3 "$REPO_DIR/guest/merge-settings.py" "$TEMPLATES/settings.json" /root/.claude/settings.json; then
+  warn "settings merge failed; falling back to the managed template"
+  install -m 0644 "$TEMPLATES/settings.json" /root/.claude/settings.json
+fi
+chmod 0644 /root/.claude/settings.json
 
 # ── Plugin marketplaces + plugins (idempotent; non-fatal) ───────────────────
 log "Ensuring plugin marketplaces + plugins"
