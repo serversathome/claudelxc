@@ -29,8 +29,11 @@ no rebuilds, no manual migration.
 
 Re-running converge must refresh **managed** config and never touch **user state**.
 
-- **Managed** (overwritten every run): `settings.json`, the `cloudcli.service` unit, the
-  update tooling, the `webapp-testing` skill.
+- **Managed** (refreshed every run): the `cloudcli.service` unit, the update tooling, and the
+  `webapp-testing` skill are overwritten. `settings.json` is **merged** (via
+  `guest/merge-settings.py`) — the repo enforces the keys it owns (auto mode, deny floor, required
+  env, curated plugins) while preserving anything you added (your own enabled plugins, custom
+  permissions, statusLine, hooks).
 - **User state** (never touched): `/root/.claude/.credentials.json` (Claude login),
   `/root/.cloudcli/auth.db` (CloudCLI login), everything under `/project` — including a
   user-edited `/project/CLAUDE.md` (seeded only if absent).
@@ -89,8 +92,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/serversathome/claudelxc/stab
 It backs up `settings.json`, clones the repo to `/opt/claudelxc`, writes `install.conf`, then runs
 `converge.sh` — after which the box self-updates nightly like any fresh deploy. `converge` keeps the
 box on its current OS (no release-upgrade) and preserves user state (Claude login, `/project`,
-CloudCLI auth); it does replace `settings.json` with the managed template (the pre-adopt copy is
-saved to `settings.json.pre-claudelxc`). The legacy un-marked `.bashrc` block from agentic.sh is
+CloudCLI auth); it **merges** managed keys into `settings.json` (enforcing the deny floor, auto
+mode, curated plugins, and required env) while preserving your own additions — and `adopt.sh` still
+saves a pre-adopt copy to `settings.json.pre-claudelxc`. The legacy un-marked `.bashrc` block from agentic.sh is
 stripped and replaced with the marked managed block. Validated on Ubuntu 24.04 agentic.sh boxes
 (converge is 24.04-safe even though it targets 26.04). To adopt onto `main` instead of `stable` for
 testing: `CLAUDELXC_BRANCH=main bash <(curl -fsSL .../main/adopt.sh)`.
