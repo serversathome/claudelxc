@@ -43,11 +43,13 @@ if ! locale -a 2>/dev/null | grep -qi 'en_US.utf8'; then
   update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 fi
 
-# ── Packages (install-if-missing; apt-get install is a no-op when present) ──
-# NOTE: converge does NOT run 'apt-get upgrade' — that is claudelxc-update's job.
-# Here we only ensure the desired package set is present.
-log "Ensuring base packages"
+# ── OS packages: upgrade everything, then ensure the desired set is present ──
+# apt upgrade runs on every converge (install AND nightly), so a box is fully
+# patched from first boot. apt-get install is a no-op for packages already there.
+log "Upgrading OS packages (apt update + upgrade)"
 apt-get update -qq
+apt-get upgrade -y -qq || warn "apt upgrade reported errors"
+log "Ensuring base packages"
 apt-get install -y -qq \
   git curl wget unzip zip \
   ca-certificates gnupg lsb-release apt-transport-https software-properties-common \
@@ -290,5 +292,9 @@ cat > /etc/logrotate.d/claudelxc <<'LOGROTATE'
     notifempty
 }
 LOGROTATE
+
+# ── Tidy up apt ─────────────────────────────────────────────────────────────
+apt-get -y -qq autoremove || true
+apt-get -qq clean || true
 
 log "claudelxc converge complete"

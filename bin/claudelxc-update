@@ -6,12 +6,12 @@
 #
 # What it does, in order:
 #   1. claudelxc itself - pull the latest deploy logic from the tracked branch
-#      (stable) and re-run the idempotent converge. This is what lets an
-#      improvement to the deployer reach an already-deployed box on its own.
-#   2. OS packages (apt).
-#   3. npm (latest), Claude Code, CloudCLI UI (latest).
-#   4. Container images (one-shot Watchtower).
-#   5. A health check (claudelxc-doctor).
+#      and re-run the idempotent converge. Converge also patches the OS
+#      (apt update + upgrade), so a self-update fully updates the box. This is
+#      what lets an improvement to the deployer reach a deployed box on its own.
+#   2. npm (latest), Claude Code, CloudCLI UI (latest).
+#   3. Container images (one-shot Watchtower).
+#   4. A health check (claudelxc-doctor).
 #
 # Deliberately NOT 'set -e': one component failing must not abort the rest or
 # truncate the log. Modeled on homelabhero's hh-update.
@@ -35,7 +35,7 @@ REPO="$(conf_get "$CONF" REPO)";         REPO="${REPO:-https://github.com/server
 # The converge is the single source of truth for in-container config; re-running
 # it lays down the newest settings/units/skills/tooling (managed files) while
 # leaving user state (creds, CloudCLI login, /project files) untouched.
-echo ">>> [1/6] claudelxc self-update (branch: $BRANCH)..."
+echo ">>> [1/5] claudelxc self-update (branch: $BRANCH)..."
 if command -v git >/dev/null 2>&1; then
   if [ ! -d "$CHECKOUT/.git" ]; then
     echo "    checkout $CHECKOUT missing; cloning $REPO ($BRANCH)"
@@ -58,18 +58,15 @@ else
   echo "    [WARN] $CHECKOUT/guest/converge.sh not found; skipping converge"
 fi
 
-echo ">>> [2/6] OS packages (includes Node.js patches within its LTS line)..."
-apt-get update -qq && apt-get upgrade -y -qq && apt-get autoremove -y -qq && apt-get clean -qq
-
-echo ">>> [3/6] npm (latest)..."
+echo ">>> [2/5] npm (latest)..."
 npm install -g --no-fund --no-audit --loglevel=error npm@latest || echo "    [WARN] npm self-update failed"
 
-echo ">>> [4/6] Claude Code + CloudCLI UI..."
+echo ">>> [3/5] Claude Code + CloudCLI UI..."
 curl -fsSL https://claude.ai/install.sh | bash || echo "    [WARN] Claude Code update failed"
 npm install -g --no-fund --no-audit --loglevel=error @cloudcli-ai/cloudcli@latest || echo "    [WARN] CloudCLI UI update failed"
 systemctl restart cloudcli || echo "    [WARN] cloudcli restart failed"
 
-echo ">>> [5/6] Docker images (one-shot Watchtower)..."
+echo ">>> [4/5] Docker images (one-shot Watchtower)..."
 if command -v docker >/dev/null 2>&1 && [ -n "$(docker ps -q 2>/dev/null)" ]; then
   docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
     containrrr/watchtower --run-once --cleanup \
@@ -78,7 +75,7 @@ else
   echo "    (no running containers; skipped)"
 fi
 
-echo ">>> [6/6] Health check..."
+echo ">>> [5/5] Health check..."
 if claudelxc-doctor; then
   echo ">>> claudelxc-update finished OK: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 else
