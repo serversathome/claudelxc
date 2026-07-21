@@ -14,6 +14,9 @@ no rebuilds, no manual migration.
 - **`install.sh`** (Proxmox host): interactive create → `pct create` → clone this repo into
   the box at `/opt/claudelxc` → run `guest/converge.sh`. Records
   `/etc/claudelxc/install.conf` (`REPO` / `BRANCH` / `CHECKOUT`).
+- **`adopt.sh`** (in-container): retrofit an **already-deployed** box (old agentic.sh or hand-built)
+  into the fleet — clone → write `install.conf` → run `guest/converge.sh`, without recreating the
+  container. Same bootstrap `install.sh` does, minus the `pct` steps. Idempotent; safe to re-run.
 - **`guest/converge.sh`** (in-container, **idempotent**): the single source of truth for how
   a box is configured. Safe to re-run — that re-runnability is what makes self-update work.
 - **`bin/claudelxc-update`** (nightly cron): `git reset --hard origin/<branch>` → run converge
@@ -74,10 +77,29 @@ Then inside the box:
 - Run converge twice and confirm idempotency: exactly one `claudelxc managed` block in
   `/root/.bashrc`, and logins + `/project` preserved.
 
+## Adopting an existing box
+
+`adopt.sh` is how a **frozen** box (deployed by the old agentic.sh, with Claude Code but no nightly
+self-update) joins the fleet without a rebuild. Run inside the container:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/serversathome/claudelxc/stable/adopt.sh)
+```
+
+It backs up `settings.json`, clones the repo to `/opt/claudelxc`, writes `install.conf`, then runs
+`converge.sh` — after which the box self-updates nightly like any fresh deploy. `converge` keeps the
+box on its current OS (no release-upgrade) and preserves user state (Claude login, `/project`,
+CloudCLI auth); it does replace `settings.json` with the managed template (the pre-adopt copy is
+saved to `settings.json.pre-claudelxc`). The legacy un-marked `.bashrc` block from agentic.sh is
+stripped and replaced with the marked managed block. Validated on Ubuntu 24.04 agentic.sh boxes
+(converge is 24.04-safe even though it targets 26.04). To adopt onto `main` instead of `stable` for
+testing: `CLAUDELXC_BRANCH=main bash <(curl -fsSL .../main/adopt.sh)`.
+
 ## Layout
 
 ```
 install.sh            # Proxmox host: create the LXC, then bootstrap + converge
+adopt.sh              # in-container: retrofit an existing box into the self-updating fleet
 guest/converge.sh     # idempotent in-container setup (the source of truth)
 bin/claudelxc-update  # nightly: pull stable -> converge -> refresh packages -> doctor
 bin/claudelxc-doctor  # health check
