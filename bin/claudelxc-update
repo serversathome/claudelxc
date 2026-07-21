@@ -60,10 +60,25 @@ fi
 
 echo ">>> [2/5] npm (latest)..."
 npm install -g --no-fund --no-audit --loglevel=error npm@latest || echo "    [WARN] npm self-update failed"
+# The npm upgrade above may be what first crosses a box into npm 12+, whose new
+# allowlist blocks dependencies' install scripts — which stops CloudCLI's native
+# modules (better-sqlite3/node-pty/bcrypt) from compiling on the reinstall below,
+# leaving the service crash-looping with ":3001 down". Disable that gate NOW, in
+# the same run, so the reinstall builds cleanly. (Persisted to /root/.npmrc.)
+npm config set dangerously-allow-all-scripts true 2>/dev/null || true
 
 echo ">>> [3/5] Claude Code + CloudCLI UI..."
 curl -fsSL https://claude.ai/install.sh | bash || echo "    [WARN] Claude Code update failed"
 npm install -g --no-fund --no-audit --loglevel=error @cloudcli-ai/cloudcli@latest || echo "    [WARN] CloudCLI UI update failed"
+# Self-heal: if the reinstall left the native addon uncompiled (npm-12 allowlist,
+# or a partial upgrade), rebuild it before restart — otherwise cloudcli crash-loops
+# and nothing binds :3001. Same guard converge uses; no-op once the binding exists.
+CCUI_PKG="$(npm root -g 2>/dev/null)/@cloudcli-ai/cloudcli"
+if [ -d "$CCUI_PKG/node_modules/better-sqlite3" ] && \
+   ! ls "$CCUI_PKG/node_modules/better-sqlite3/build/Release/"*.node >/dev/null 2>&1; then
+  echo "    rebuilding CloudCLI native modules (better-sqlite3/node-pty/bcrypt)"
+  ( cd "$CCUI_PKG" && npm rebuild >/dev/null 2>&1 ) || echo "    [WARN] CloudCLI native rebuild failed"
+fi
 systemctl restart cloudcli || echo "    [WARN] cloudcli restart failed"
 
 echo ">>> [4/5] Docker images (one-shot Watchtower)..."
