@@ -43,11 +43,13 @@ if ! locale -a 2>/dev/null | grep -qi 'en_US.utf8'; then
   update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 fi
 
-# ── Packages (install-if-missing; apt-get install is a no-op when present) ──
-# NOTE: converge does NOT run 'apt-get upgrade' — that is claudelxc-update's job.
-# Here we only ensure the desired package set is present.
-log "Ensuring base packages"
+# ── OS packages: upgrade everything, then ensure the desired set is present ──
+# apt upgrade runs on every converge (install AND nightly), so a box is fully
+# patched from first boot. apt-get install is a no-op for packages already there.
+log "Upgrading OS packages (apt update + upgrade)"
 apt-get update -qq
+apt-get upgrade -y -qq || warn "apt upgrade reported errors"
+log "Ensuring base packages"
 apt-get install -y -qq \
   git curl wget unzip zip \
   ca-certificates gnupg lsb-release apt-transport-https software-properties-common \
@@ -76,6 +78,13 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 if command -v node >/dev/null 2>&1; then
   echo "    Node.js $(node --version 2>/dev/null) / npm $(npm --version 2>/dev/null)"
+  # npm 12+ blocks dependencies' install scripts behind an allowlist, which
+  # breaks native modules (CloudCLI's better-sqlite3/node-pty/bcrypt never
+  # compile → the service crash-loops with "Could not locate the bindings
+  # file" and nothing binds :3001). Restore pre-12 behavior so global installs
+  # build their native addons. Persisted in /root/.npmrc, so it also covers the
+  # updater's future cloudcli@latest upgrades and CloudCLI's in-app plugin builds.
+  npm config set dangerously-allow-all-scripts true 2>/dev/null || true
   # Global dev tools — install only if absent (updater keeps them current).
   command -v prettier >/dev/null 2>&1 || \
     npm install -g "${NPM_QUIET[@]}" typescript ts-node eslint prettier || warn "global npm tools failed"
@@ -253,6 +262,17 @@ CCUI_BIN="$(command -v cloudcli || echo /usr/bin/cloudcli)"
 mkdir -p /root/.cloudcli
 echo "    CloudCLI UI: $("$CCUI_BIN" version 2>/dev/null || echo 'version unknown')"
 
+# Self-heal native modules: if CloudCLI's better-sqlite3 addon isn't compiled
+# (e.g. it was installed under npm 12 before scripts were allowed, or an upgrade
+# didn't rebuild), recompile — otherwise the service crash-loops and :3001 stays
+# down. No-op once the binding is present, so it's cheap on a healthy re-converge.
+CCUI_PKG="$(npm root -g 2>/dev/null)/@cloudcli-ai/cloudcli"
+if [ -d "$CCUI_PKG/node_modules/better-sqlite3" ] && \
+   ! ls "$CCUI_PKG/node_modules/better-sqlite3/build/Release/"*.node >/dev/null 2>&1; then
+  log "Rebuilding CloudCLI native modules (better-sqlite3/node-pty/bcrypt)"
+  ( cd "$CCUI_PKG" && npm rebuild >/dev/null 2>&1 ) || warn "CloudCLI native rebuild failed"
+fi
+
 # systemd unit (MANAGED) — write from template, reload+restart only on change so
 # we don't drop live UI sessions on an unchanged nightly run.
 log "Applying cloudcli.service unit"
@@ -290,5 +310,9 @@ cat > /etc/logrotate.d/claudelxc <<'LOGROTATE'
     notifempty
 }
 LOGROTATE
+
+# ── Tidy up apt ─────────────────────────────────────────────────────────────
+apt-get -y -qq autoremove || true
+apt-get -qq clean || true
 
 log "claudelxc converge complete"
