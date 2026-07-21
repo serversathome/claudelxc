@@ -47,6 +47,26 @@ claudelxc-doctor      # just the health check
 Update log: `/var/log/claudelxc-update.log`. To turn nightly updates off, delete
 `/etc/cron.d/claudelxc`.
 
+## Already have an older box?
+
+If you deployed a Claude Code box with an earlier version of this script (or the old
+`agentic.sh`), it has Claude Code but **won't self-update** — improvements never reach it. Adopt
+it into the self-updating fleet without rebuilding. Run this **inside that container**, as root:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/serversathome/claudelxc/stable/adopt.sh)
+```
+
+It brings the box fully up to spec (installs the web UI, the nightly updater, and anything
+missing), then it self-updates every night like a fresh deploy. What's preserved vs. changed:
+
+- **Kept:** your Claude login, everything under `/project`, your CloudCLI login, Docker/Rust, and
+  the box's current OS (no release-upgrade — it just tracks the latest config).
+- **Replaced:** `/root/.claude/settings.json` is swapped for the managed template; your old copy is
+  saved next to it as `settings.json.pre-claudelxc`.
+
+Re-running is safe. Afterward, `claudelxc-doctor` should come back all-green.
+
 ## Managing the box
 
 - **Web UI service:** `systemctl status cloudcli` (`journalctl -u cloudcli` for logs)
