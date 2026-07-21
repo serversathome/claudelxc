@@ -78,6 +78,13 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 if command -v node >/dev/null 2>&1; then
   echo "    Node.js $(node --version 2>/dev/null) / npm $(npm --version 2>/dev/null)"
+  # npm 12+ blocks dependencies' install scripts behind an allowlist, which
+  # breaks native modules (CloudCLI's better-sqlite3/node-pty/bcrypt never
+  # compile → the service crash-loops with "Could not locate the bindings
+  # file" and nothing binds :3001). Restore pre-12 behavior so global installs
+  # build their native addons. Persisted in /root/.npmrc, so it also covers the
+  # updater's future cloudcli@latest upgrades and CloudCLI's in-app plugin builds.
+  npm config set dangerously-allow-all-scripts true 2>/dev/null || true
   # Global dev tools — install only if absent (updater keeps them current).
   command -v prettier >/dev/null 2>&1 || \
     npm install -g "${NPM_QUIET[@]}" typescript ts-node eslint prettier || warn "global npm tools failed"
@@ -254,6 +261,17 @@ fi
 CCUI_BIN="$(command -v cloudcli || echo /usr/bin/cloudcli)"
 mkdir -p /root/.cloudcli
 echo "    CloudCLI UI: $("$CCUI_BIN" version 2>/dev/null || echo 'version unknown')"
+
+# Self-heal native modules: if CloudCLI's better-sqlite3 addon isn't compiled
+# (e.g. it was installed under npm 12 before scripts were allowed, or an upgrade
+# didn't rebuild), recompile — otherwise the service crash-loops and :3001 stays
+# down. No-op once the binding is present, so it's cheap on a healthy re-converge.
+CCUI_PKG="$(npm root -g 2>/dev/null)/@cloudcli-ai/cloudcli"
+if [ -d "$CCUI_PKG/node_modules/better-sqlite3" ] && \
+   ! ls "$CCUI_PKG/node_modules/better-sqlite3/build/Release/"*.node >/dev/null 2>&1; then
+  log "Rebuilding CloudCLI native modules (better-sqlite3/node-pty/bcrypt)"
+  ( cd "$CCUI_PKG" && npm rebuild >/dev/null 2>&1 ) || warn "CloudCLI native rebuild failed"
+fi
 
 # systemd unit (MANAGED) — write from template, reload+restart only on change so
 # we don't drop live UI sessions on an unchanged nightly run.
