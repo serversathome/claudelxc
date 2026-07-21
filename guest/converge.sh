@@ -152,33 +152,66 @@ fi
 chmod 0644 /root/.claude/settings.json
 
 # ── Plugin marketplaces + plugins (idempotent; non-fatal) ───────────────────
+# All curated plugins come from Anthropic's first-party marketplace
+# (claude-plugins-official); superpowers from its own. We deliberately do NOT add
+# the anthropics/claude-code "demo" marketplace anymore — its example plugins
+# shadow the official ones with the same names, and everything we want lives in
+# the official one. Older boxes that installed the demo copies get cleaned below.
 log "Ensuring plugin marketplaces + plugins"
 "$CLAUDE_BIN" plugin marketplace add anthropics/claude-plugins-official >/dev/null 2>&1 || true
-"$CLAUDE_BIN" plugin marketplace add anthropics/claude-code            >/dev/null 2>&1 || true
 "$CLAUDE_BIN" plugin marketplace add obra/superpowers-marketplace       >/dev/null 2>&1 || true
+# Refresh the official index BEFORE installing: a freshly-added marketplace can
+# have a stale/empty plugin list, which silently makes name@official installs
+# fall through (how older boxes ended up with the demo-marketplace copies).
+"$CLAUDE_BIN" plugin marketplace update claude-plugins-official >/dev/null 2>&1 || true
 
 installed_plugins="$("$CLAUDE_BIN" plugin list 2>/dev/null || true)"
-install_plugin() {
-  local name="$1" mkt
-  echo "$installed_plugins" | grep -q "$name" && { echo "    $name already installed"; return 0; }
-  for mkt in claude-plugins-official claude-code-plugins; do
-    if "$CLAUDE_BIN" plugin install "${name}@${mkt}" 2>/dev/null; then
-      echo "    installed ${name}@${mkt}"; return 0
-    fi
-  done
-  warn "could not install plugin: ${name}"
+install_plugin() {  # install_plugin <name> <marketplace>
+  local ref="$1@$2"
+  echo "$installed_plugins" | grep -q "$ref" && { echo "    $ref already installed"; return 0; }
+  if "$CLAUDE_BIN" plugin install "$ref" 2>/dev/null; then
+    echo "    installed $ref"
+  else
+    warn "could not install plugin: $ref"
+  fi
 }
-install_plugin frontend-design
-install_plugin code-review
-install_plugin commit-commands
-install_plugin security-guidance
-install_plugin context7
-if echo "$installed_plugins" | grep -q superpowers; then
-  echo "    superpowers already installed"
-elif "$CLAUDE_BIN" plugin install superpowers@superpowers-marketplace 2>/dev/null; then
-  echo "    installed superpowers@superpowers-marketplace"
-else
-  warn "could not install superpowers"
+# Curated plugins + LSP language-server plugins (real-time diagnostics/nav for
+# the toolchains this box already ships). All from the official marketplace.
+for p in code-review commit-commands frontend-design security-guidance context7 \
+         typescript-lsp pyright-lsp gopls-lsp rust-analyzer-lsp; do
+  install_plugin "$p" claude-plugins-official
+done
+install_plugin superpowers superpowers-marketplace
+
+# One-time cleanup: shed the old anthropics/claude-code "demo" marketplace and any
+# duplicate plugin copies installed from it (older boxes), so the skills menu
+# doesn't show two of each. Uninstalling also drops their enabledPlugins entries.
+# Idempotent no-op once a box is clean.
+for p in code-review commit-commands frontend-design security-guidance; do
+  if echo "$installed_plugins" | grep -q "${p}@claude-code-plugins"; then
+    "$CLAUDE_BIN" plugin uninstall "${p}@claude-code-plugins" >/dev/null 2>&1 \
+      && echo "    removed legacy ${p}@claude-code-plugins" || true
+  fi
+done
+"$CLAUDE_BIN" plugin marketplace remove claude-code-plugins >/dev/null 2>&1 || true
+
+# ── Language servers for the *-lsp plugins ──────────────────────────────────
+# The LSP plugins are thin: they shell out to these binaries via PATH and do NOT
+# install them. Put each on the npm global bin or /usr/local/bin — both are on
+# the cloudcli.service PATH — so the web-UI's Claude finds them too. Guarded so
+# nightly runs don't reinstall.
+log "Ensuring language servers for the LSP plugins"
+command -v typescript-language-server >/dev/null 2>&1 || \
+  npm install -g "${NPM_QUIET[@]}" typescript-language-server typescript || warn "typescript-language-server install failed"
+command -v pyright-langserver >/dev/null 2>&1 || \
+  npm install -g "${NPM_QUIET[@]}" pyright || warn "pyright install failed"
+if [ ! -x /usr/local/bin/gopls ] && [ -x /usr/local/go/bin/go ]; then
+  GOBIN=/usr/local/bin /usr/local/go/bin/go install golang.org/x/tools/gopls@latest || warn "gopls install failed"
+fi
+if ! command -v rust-analyzer >/dev/null 2>&1 && [ -x "$HOME/.cargo/bin/rustup" ]; then
+  "$HOME/.cargo/bin/rustup" component add rust-analyzer >/dev/null 2>&1 \
+    && ln -sf "$("$HOME/.cargo/bin/rustup" which rust-analyzer 2>/dev/null)" /usr/local/bin/rust-analyzer \
+    || warn "rust-analyzer install failed"
 fi
 
 # ── webapp-testing skill (MANAGED — refreshed every converge) ───────────────
