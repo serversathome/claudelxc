@@ -27,8 +27,11 @@ link to the web UI on port **3001**. Open it, create a login, and start talking 
 - **Dev toolchain** — Node.js (LTS), Python 3, Go, Rust, Docker + Compose, plus git, ripgrep,
   fzf, fd, database clients, and build essentials.
 - **Curated plugins & skills** — code-review, security-guidance, commit-commands,
-  frontend-design, context7, superpowers, and a Playwright-based webapp-testing skill.
-- **Agent teams** and extended thinking enabled out of the box.
+  frontend-design, context7, superpowers, language-server (LSP) plugins for
+  TypeScript/Python/Go/Rust (with their servers installed), and a Playwright-based
+  webapp-testing skill.
+- **Agent teams** enabled out of the box; extended thinking is adaptive (the model thinks when
+  it helps, within a set budget).
 
 ## It keeps itself updated
 
@@ -62,8 +65,10 @@ missing), then it self-updates every night like a fresh deploy. What's preserved
 
 - **Kept:** your Claude login, everything under `/project`, your CloudCLI login, Docker/Rust, and
   the box's current OS (no release-upgrade — it just tracks the latest config).
-- **Replaced:** `/root/.claude/settings.json` is swapped for the managed template; your old copy is
-  saved next to it as `settings.json.pre-claudelxc`.
+- **Merged:** managed keys in `/root/.claude/settings.json` (auto mode, the deny floor, required
+  env, the curated plugins) are enforced, while anything you added — your own enabled plugins,
+  custom permissions, statusLine, hooks — is preserved. A pre-adopt copy is still saved as
+  `settings.json.pre-claudelxc`.
 
 Re-running is safe. Afterward, `claudelxc-doctor` should come back all-green.
 
