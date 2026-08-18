@@ -27,7 +27,7 @@ link to the web UI on port **3001**. Open it, create a login, and start talking 
 - **Dev toolchain** — Node.js (LTS), Python 3, Go, Rust, Docker + Compose, plus git, ripgrep,
   fzf, fd, database clients, and build essentials.
 - **Curated plugins & skills** — code-review, security-guidance, claude-security,
-  commit-commands, frontend-design, context7, claude-md-management, skill-creator,
+  commit-commands, frontend-design, modern-web-guidance, context7, elements-of-style,
   superpowers, language-server (LSP) plugins for TypeScript/Python/Go/Rust/C++
   (with their servers installed), and a Playwright-based webapp-testing skill.
 - **Agent teams** enabled out of the box; extended thinking is adaptive (the model thinks when

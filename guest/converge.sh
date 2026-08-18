@@ -180,15 +180,20 @@ install_plugin() {  # install_plugin <name> <marketplace>
 # One *-lsp plugin per toolchain in the base image (Node/TS, Python, Go, Rust,
 # and C/C++ via build-essential). The other official LSP plugins (jdtls, ruby,
 # php, csharp, swift, kotlin, lua) are deliberately skipped: no toolchain here.
+# modern-web-guidance fetches its guides via `npx modern-web-guidance@latest` at
+# query time, so it needs outbound npm; it degrades to nothing useful offline.
 for p in code-review commit-commands frontend-design security-guidance context7 \
-         claude-security claude-md-management skill-creator \
+         claude-security modern-web-guidance \
          typescript-lsp pyright-lsp gopls-lsp rust-analyzer-lsp clangd-lsp; do
   install_plugin "$p" claude-plugins-official
 done
 # superpowers now also ships in the official marketplace, but pinned to a SHA that
 # lags upstream — keep installing from Jesse Vincent's own marketplace so the box
 # tracks current releases. (Both refs coexist fine; we only ever install this one.)
-install_plugin superpowers superpowers-marketplace
+# elements-of-style lives only here; it is pure markdown, no hooks or MCP server.
+for p in superpowers elements-of-style; do
+  install_plugin "$p" superpowers-marketplace
+done
 
 # One-time cleanup: shed the old anthropics/claude-code "demo" marketplace and any
 # duplicate plugin copies installed from it (older boxes), so the skills menu

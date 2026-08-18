@@ -68,9 +68,11 @@ the nightly merge — it only forces the managed keys.
 - **claude-security**: On-demand deep vulnerability scan of your own code, with
   every finding challenged by a verification panel before it's reported
 - **context7**: Live, version-specific library docs lookup (reduces API hallucinations)
-- **claude-md-management**: Audit and refresh this CLAUDE.md — capture session
-  learnings and keep project memory current
-- **skill-creator**: Create, improve, and eval your own skills
+- **modern-web-guidance**: Current web-platform best practices (View Transitions,
+  container queries, `:has()`, Core Web Vitals) — counters stale training data on
+  frontend work. Fetches guides over the network at query time via `npx`.
+- **elements-of-style**: Strunk's writing rules, applied to docs, commit messages,
+  and any prose a human will read
 - **superpowers**: Development workflow framework — brainstorm → plan → implement with TDD
   - /superpowers:brainstorm — Refine ideas before coding
   - /superpowers:write-plan — Create implementation plans
