@@ -56,18 +56,32 @@ files under /project are preserved across updates. This file is a seed written
 only on first deploy — edit it freely; the updater will not overwrite it.
 
 ## Installed Plugins / Skills
-Plugins are installed via the `claude plugin` CLI at provision time (not via an
-enabledPlugins block, which is ignored in containers). Run `claude plugin list`
-to confirm what's active.
+Plugins are installed with the `claude plugin` CLI at provision time, which also
+writes them into `enabledPlugins` in `/root/.claude/settings.json`; the managed
+template declares the same set so nightly converges re-enable them. Run
+`claude plugin list` to confirm what's active. Plugins you add yourself survive
+the nightly merge — it only forces the managed keys.
 - **frontend-design**: Production-grade UI with distinctive aesthetics (auto-activates on frontend tasks)
 - **code-review**: Multi-agent PR review with confidence scoring
 - **commit-commands**: Git commit, push, and PR workflows (/commit, /push, /pr)
-- **security-guidance**: Security warnings when editing sensitive files
+- **security-guidance**: Security warnings on edits, plus a diff/commit reviewer
+- **claude-security**: On-demand deep vulnerability scan of your own code, with
+  every finding challenged by a verification panel before it's reported
 - **context7**: Live, version-specific library docs lookup (reduces API hallucinations)
+- **modern-web-guidance**: Current web-platform best practices (View Transitions,
+  container queries, `:has()`, Core Web Vitals) — counters stale training data on
+  frontend work. Fetches guides over the network at query time via `npx`.
+- **elements-of-style**: Strunk's writing rules, applied to docs, commit messages,
+  and any prose a human will read
 - **superpowers**: Development workflow framework — brainstorm → plan → implement with TDD
   - /superpowers:brainstorm — Refine ideas before coding
   - /superpowers:write-plan — Create implementation plans
   - /superpowers:execute-plan — Execute plans in batches via subagents
   - Auto-activating skills: test-driven-development, systematic-debugging, verification-before-completion
+- **Language servers (LSP)**: `typescript-lsp`, `pyright-lsp`, `gopls-lsp`,
+  `rust-analyzer-lsp`, `clangd-lsp` — go-to-definition, find-references, and
+  real-time diagnostics for every toolchain on this box. The plugins are metadata
+  only; converge installs the actual servers (typescript-language-server, pyright,
+  gopls, rust-analyzer, clangd) onto PATH.
 - **webapp-testing** (local skill, not a marketplace plugin): Playwright-based
   browser testing for UI verification and debugging
