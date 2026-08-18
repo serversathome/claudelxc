@@ -26,10 +26,10 @@ link to the web UI on port **3001**. Open it, create a login, and start talking 
   driving the same Claude Code under the hood.
 - **Dev toolchain** — Node.js (LTS), Python 3, Go, Rust, Docker + Compose, plus git, ripgrep,
   fzf, fd, database clients, and build essentials.
-- **Curated plugins & skills** — code-review, security-guidance, commit-commands,
-  frontend-design, context7, superpowers, language-server (LSP) plugins for
-  TypeScript/Python/Go/Rust (with their servers installed), and a Playwright-based
-  webapp-testing skill.
+- **Curated plugins & skills** — code-review, security-guidance, claude-security,
+  commit-commands, frontend-design, context7, claude-md-management, skill-creator,
+  superpowers, language-server (LSP) plugins for TypeScript/Python/Go/Rust/C++
+  (with their servers installed), and a Playwright-based webapp-testing skill.
 - **Agent teams** enabled out of the box; extended thinking is adaptive (the model thinks when
   it helps, within a set budget).
 

@@ -177,10 +177,17 @@ install_plugin() {  # install_plugin <name> <marketplace>
 }
 # Curated plugins + LSP language-server plugins (real-time diagnostics/nav for
 # the toolchains this box already ships). All from the official marketplace.
+# One *-lsp plugin per toolchain in the base image (Node/TS, Python, Go, Rust,
+# and C/C++ via build-essential). The other official LSP plugins (jdtls, ruby,
+# php, csharp, swift, kotlin, lua) are deliberately skipped: no toolchain here.
 for p in code-review commit-commands frontend-design security-guidance context7 \
-         typescript-lsp pyright-lsp gopls-lsp rust-analyzer-lsp; do
+         claude-security claude-md-management skill-creator \
+         typescript-lsp pyright-lsp gopls-lsp rust-analyzer-lsp clangd-lsp; do
   install_plugin "$p" claude-plugins-official
 done
+# superpowers now also ships in the official marketplace, but pinned to a SHA that
+# lags upstream — keep installing from Jesse Vincent's own marketplace so the box
+# tracks current releases. (Both refs coexist fine; we only ever install this one.)
 install_plugin superpowers superpowers-marketplace
 
 # One-time cleanup: shed the old anthropics/claude-code "demo" marketplace and any
@@ -197,14 +204,16 @@ done
 
 # ── Language servers for the *-lsp plugins ──────────────────────────────────
 # The LSP plugins are thin: they shell out to these binaries via PATH and do NOT
-# install them. Put each on the npm global bin or /usr/local/bin — both are on
-# the cloudcli.service PATH — so the web-UI's Claude finds them too. Guarded so
-# nightly runs don't reinstall.
+# install them. Put each on the npm global bin, /usr/local/bin, or /usr/bin (apt)
+# — all on the cloudcli.service PATH — so the web-UI's Claude finds them too.
+# Guarded so nightly runs don't reinstall.
 log "Ensuring language servers for the LSP plugins"
 command -v typescript-language-server >/dev/null 2>&1 || \
   npm install -g "${NPM_QUIET[@]}" typescript-language-server typescript || warn "typescript-language-server install failed"
 command -v pyright-langserver >/dev/null 2>&1 || \
   npm install -g "${NPM_QUIET[@]}" pyright || warn "pyright install failed"
+command -v clangd >/dev/null 2>&1 || \
+  apt-get install -y -qq clangd || warn "clangd install failed"
 if [ ! -x /usr/local/bin/gopls ] && [ -x /usr/local/go/bin/go ]; then
   GOBIN=/usr/local/bin /usr/local/go/bin/go install golang.org/x/tools/gopls@latest || warn "gopls install failed"
 fi
