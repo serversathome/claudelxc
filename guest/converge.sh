@@ -69,8 +69,15 @@ apt-get install -y -qq \
   || warn "some base packages failed to install"
 
 # ── Node.js (latest LTS) ────────────────────────────────────────────────────
-if ! command -v node >/dev/null 2>&1; then
-  log "Installing Node.js (latest LTS via NodeSource)"
+# CloudCLI needs Node 22+; an older node already on the box (pulled in as a
+# dependency, or from a previous release's apt repo) has to be replaced, not
+# just left alone — `command -v node` alone would silently accept Node 18.
+NODE_MAJOR=0
+command -v node >/dev/null 2>&1 && \
+  NODE_MAJOR=$(node --version 2>/dev/null | sed -n 's/^v\([0-9]\+\).*/\1/p')
+NODE_MAJOR=${NODE_MAJOR:-0}
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  log "Installing Node.js (latest LTS via NodeSource; found major '${NODE_MAJOR}')"
   curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y -qq nodejs \
     || warn "Node.js install failed"
@@ -94,7 +101,9 @@ fi
 if [ ! -x /usr/local/go/bin/go ]; then
   log "Installing Go (latest)"
   GO_VERSION=$(curl -fsSL "https://go.dev/VERSION?m=text" | head -1)
-  if [ -n "${GO_VERSION:-}" ] && curl -fsSL "https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz; then
+  # Go's tarballs are per-architecture; the host arch decides (amd64 or arm64).
+  GO_ARCH=$(dpkg --print-architecture 2>/dev/null || echo amd64)
+  if [ -n "${GO_VERSION:-}" ] && curl -fsSL "https://go.dev/dl/${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tar.gz; then
     rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tar.gz && rm -f /tmp/go.tar.gz
     echo 'export PATH=$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh
     echo "    Go $(/usr/local/go/bin/go version 2>/dev/null | awk '{print $3}')"
@@ -168,7 +177,7 @@ log "Ensuring plugin marketplaces + plugins"
 installed_plugins="$("$CLAUDE_BIN" plugin list 2>/dev/null || true)"
 install_plugin() {  # install_plugin <name> <marketplace>
   local ref="$1@$2"
-  echo "$installed_plugins" | grep -q "$ref" && { echo "    $ref already installed"; return 0; }
+  echo "$installed_plugins" | grep -qF "$ref" && { echo "    $ref already installed"; return 0; }
   if "$CLAUDE_BIN" plugin install "$ref" 2>/dev/null; then
     echo "    installed $ref"
   else
@@ -200,7 +209,7 @@ done
 # doesn't show two of each. Uninstalling also drops their enabledPlugins entries.
 # Idempotent no-op once a box is clean.
 for p in code-review commit-commands frontend-design security-guidance; do
-  if echo "$installed_plugins" | grep -q "${p}@claude-code-plugins"; then
+  if echo "$installed_plugins" | grep -qF "${p}@claude-code-plugins"; then
     "$CLAUDE_BIN" plugin uninstall "${p}@claude-code-plugins" >/dev/null 2>&1 \
       && echo "    removed legacy ${p}@claude-code-plugins" || true
   fi
@@ -248,9 +257,10 @@ export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
 grep -q PLAYWRIGHT_HOST_PLATFORM_OVERRIDE /etc/environment 2>/dev/null \
   || echo 'PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64' >> /etc/environment
 
-if ! pip show playwright >/dev/null 2>&1; then
+if ! python3 -m pip show playwright >/dev/null 2>&1; then
   log "Installing Python Playwright (webapp-testing skill)"
-  pip install --break-system-packages -q playwright || warn "pip install playwright failed"
+  python3 -m pip install --break-system-packages -q playwright \
+    || warn "pip install playwright failed"
 fi
 if ! command -v playwright >/dev/null 2>&1 && ! npm ls -g playwright >/dev/null 2>&1; then
   log "Installing global Node Playwright (CloudCLI Browser feature)"
@@ -274,10 +284,31 @@ else
 fi
 
 # ── SSH (idempotent) ────────────────────────────────────────────────────────
+# Ubuntu's sshd_config Includes /etc/ssh/sshd_config.d/*.conf from the TOP of the
+# file and the FIRST value of a keyword wins, so a drop-in (cloud-init ships one
+# with PasswordAuthentication no) silently outranks any edit to the main file.
+# Own a drop-in that sorts first instead, and keep the main-file edit for images
+# that predate the Include.
+log "Configuring sshd (root login + password auth)"
 sed -i "s/^#*PermitRootLogin.*/PermitRootLogin yes/" /etc/ssh/sshd_config
 sed -i "s/^#*PasswordAuthentication.*/PasswordAuthentication yes/" /etc/ssh/sshd_config
-systemctl enable ssh >/dev/null 2>&1 || true
-systemctl restart ssh || true
+if grep -qE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config; then
+  mkdir -p /etc/ssh/sshd_config.d
+  cat > /etc/ssh/sshd_config.d/00-claudelxc.conf <<'SSHD'
+# Managed by claudelxc. Sorts before any other drop-in, and sshd keeps the first
+# value it sees, so these win over cloud-init's defaults.
+PermitRootLogin yes
+PasswordAuthentication yes
+SSHD
+  chmod 0644 /etc/ssh/sshd_config.d/00-claudelxc.conf
+fi
+# Never restart into a config sshd rejects — that locks the box out of SSH.
+if sshd -t 2>/dev/null || /usr/sbin/sshd -t 2>/dev/null; then
+  systemctl enable ssh >/dev/null 2>&1 || true
+  systemctl restart ssh || warn "ssh restart failed (check 'journalctl -u ssh')"
+else
+  warn "sshd config test failed; leaving the running sshd untouched"
+fi
 
 # ── Shell environment (MANAGED BLOCK — replaced, never duplicated) ──────────
 log "Applying managed .bashrc block"
@@ -316,7 +347,8 @@ if ! command -v cloudcli >/dev/null 2>&1; then
   npm install -g "${NPM_QUIET[@]}" @cloudcli-ai/cloudcli \
     || warn "CloudCLI UI install failed (needs Node 22+ and build tools for node-pty)"
 fi
-CCUI_BIN="$(command -v cloudcli || echo /usr/bin/cloudcli)"
+CCUI_BIN="$(command -v cloudcli || echo "$(npm prefix -g 2>/dev/null)/bin/cloudcli")"
+[ -x "$CCUI_BIN" ] || warn "cloudcli binary not found at '$CCUI_BIN' — the web UI on :3001 will not start"
 mkdir -p /root/.cloudcli
 echo "    CloudCLI UI: $("$CCUI_BIN" version 2>/dev/null || echo 'version unknown')"
 

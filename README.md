@@ -14,7 +14,7 @@ Run on your **Proxmox host**, as root:
 bash <(curl -fsSL https://raw.githubusercontent.com/serversathome/claudelxc/stable/install.sh)
 ```
 
-Answer a few prompts (container ID, CPU/RAM/disk, network). A few minutes later you get a
+Answer a few prompts (container ID, CPU/RAM/disk, storage, bridge, network). A few minutes later you get a
 link to the web UI on port **3001**. Open it, create a login, and start talking to Claude.
 
 ## What you get
@@ -86,4 +86,6 @@ the Proxmox UI.
 
 - The box clones this **public** repo anonymously — **no credentials are stored on it**.
 - It self-updates from the `stable` branch, which tracks the latest known-good release.
-- Runs as root inside an unprivileged-by-choice LXC with nesting enabled for Docker.
+- Runs as root inside a **privileged** LXC (`--unprivileged 0`) with nesting, `keyctl`, and an
+  unconfined AppArmor profile — what Docker-in-LXC needs. Treat the box as trusted-network
+  equipment, not as an isolation boundary.
