@@ -20,7 +20,13 @@ export DEBIAN_FRONTEND=noninteractive
 
 CONF=/etc/claudelxc/install.conf
 LOG=/var/log/claudelxc-update.log
-exec >>"$LOG" 2>&1
+# From cron: log only. Run by hand: log AND show progress, so a 10-minute run
+# doesn't look like a hang with no output.
+if [ -t 1 ]; then
+  exec > >(tee -a "$LOG") 2>&1
+else
+  exec >>"$LOG" 2>&1
+fi
 
 echo "==================================================================="
 echo ">>> claudelxc-update starting: $(date '+%Y-%m-%d %H:%M:%S %Z')"
@@ -79,7 +85,12 @@ if [ -d "$CCUI_PKG/node_modules/better-sqlite3" ] && \
   echo "    rebuilding CloudCLI native modules (better-sqlite3/node-pty/bcrypt)"
   ( cd "$CCUI_PKG" && npm rebuild >/dev/null 2>&1 ) || echo "    [WARN] CloudCLI native rebuild failed"
 fi
-systemctl restart cloudcli || echo "    [WARN] cloudcli restart failed"
+if systemctl list-unit-files cloudcli.service >/dev/null 2>&1 &&
+   systemctl cat cloudcli.service >/dev/null 2>&1; then
+  systemctl restart cloudcli || echo "    [WARN] cloudcli restart failed (see 'journalctl -u cloudcli')"
+else
+  echo "    [WARN] cloudcli.service not installed; skipping restart"
+fi
 
 echo ">>> [4/5] Docker images (one-shot Watchtower)..."
 if command -v docker >/dev/null 2>&1 && [ -n "$(docker ps -q 2>/dev/null)" ]; then
