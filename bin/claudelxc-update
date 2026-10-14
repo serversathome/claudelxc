@@ -74,7 +74,15 @@ npm install -g --no-fund --no-audit --loglevel=error npm@latest || echo "    [WA
 npm config set dangerously-allow-all-scripts true 2>/dev/null || true
 
 echo ">>> [3/5] Claude Code + CloudCLI UI..."
-curl -fsSL https://claude.ai/install.sh | bash || echo "    [WARN] Claude Code update failed"
+# `claude update` is the documented manual update path for a native install
+# (DISABLE_AUTOUPDATER only stops the background check; it honors the
+# autoUpdatesChannel / minimumVersion settings). Fall back to re-running the
+# installer when claude is missing or too old to have `update`.
+if command -v claude >/dev/null 2>&1 && claude update; then
+  echo "    Claude Code: $(claude --version 2>/dev/null || echo 'version unknown')"
+else
+  curl -fsSL https://claude.ai/install.sh | bash || echo "    [WARN] Claude Code update failed"
+fi
 npm install -g --no-fund --no-audit --loglevel=error @cloudcli-ai/cloudcli@latest || echo "    [WARN] CloudCLI UI update failed"
 # Self-heal: if the reinstall left the native addon uncompiled (npm-12 allowlist,
 # or a partial upgrade), rebuild it before restart — otherwise cloudcli crash-loops

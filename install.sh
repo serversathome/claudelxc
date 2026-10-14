@@ -244,10 +244,13 @@ create_container() {
 start_container() {
   info "Starting container $CT_ID..."
   pct start "$CT_ID"; sleep 3
-  info "Waiting for network..."
+  info "Waiting for network (DNS + outbound HTTPS to github.com)..."
+  # Test what bootstrap actually needs — name resolution and an outbound TCP
+  # connection — rather than ICMP, which some networks block and which proves
+  # nothing about DNS. bash's /dev/tcp needs no extra packages in the template.
   local attempts=0
-  while ! pct exec "$CT_ID" -- ping -c1 -W2 1.1.1.1 &>/dev/null; do
-    attempts=$(( attempts + 1 )); [[ $attempts -lt 30 ]] || error "Container failed to get network after 60s."
+  while ! pct exec "$CT_ID" -- bash -c 'getent hosts github.com >/dev/null && timeout 5 bash -c "exec 3<>/dev/tcp/github.com/443"' &>/dev/null; do
+    attempts=$(( attempts + 1 )); [[ $attempts -lt 30 ]] || error "Container failed to get network after 60s (check DNS '$CT_DNS', gateway, and the bridge '$CT_BRIDGE')."
     sleep 2
   done
   success "Container is online."
