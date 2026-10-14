@@ -40,10 +40,11 @@ fi
 
 say "Adopting this box into claudelxc (branch: $BRANCH)"
 
-# ── Back up the managed files converge overwrites, so nothing is lost ────────
-# settings.json is replaced with the managed template; keep the box's current
-# copy alongside it. (User state — creds, /project, CloudCLI auth — is never
-# touched by converge, so it needs no backup.)
+# ── Back up settings.json before converge first touches it ──────────────────
+# converge MERGES the managed keys into settings.json (your own plugins, rules,
+# statusLine, hooks survive), but keep a pre-adopt copy anyway so the exact
+# original is one `cp` away. (User state — creds, /project, CloudCLI auth — is
+# never touched by converge, so it needs no backup.)
 if [ -f /root/.claude/settings.json ] && [ ! -f /root/.claude/settings.json.pre-claudelxc ]; then
   cp -a /root/.claude/settings.json /root/.claude/settings.json.pre-claudelxc
   say "Backed up existing settings.json -> settings.json.pre-claudelxc"

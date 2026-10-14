@@ -152,9 +152,12 @@ echo "    Claude Code: $("$CLAUDE_BIN" --version 2>/dev/null || echo 'version un
 # own plugins on every nightly run (settings.json is where plugin-enabled state
 # lives). merge-settings.py tolerates a missing/empty/corrupt file by falling
 # back to the template, so a fresh box still gets the full managed config.
+# settings.retired.json lists managed keys/rules earlier releases wrote that are
+# now wrong or obsolete; they are stripped first, so a removal in the template
+# actually reaches deployed boxes (a pure additive merge never would).
 log "Merging managed Claude settings (preserving user additions)"
 mkdir -p /root/.claude
-if ! python3 "$REPO_DIR/guest/merge-settings.py" "$TEMPLATES/settings.json" /root/.claude/settings.json; then
+if ! python3 "$REPO_DIR/guest/merge-settings.py" "$TEMPLATES/settings.json" /root/.claude/settings.json "$TEMPLATES/settings.retired.json"; then
   warn "settings merge failed; falling back to the managed template"
   install -m 0644 "$TEMPLATES/settings.json" /root/.claude/settings.json
 fi
@@ -174,11 +177,21 @@ log "Ensuring plugin marketplaces + plugins"
 # fall through (how older boxes ended up with the demo-marketplace copies).
 "$CLAUDE_BIN" plugin marketplace update claude-plugins-official >/dev/null 2>&1 || true
 
-installed_plugins="$("$CLAUDE_BIN" plugin list 2>/dev/null || true)"
+# `plugin list --json` gives one object per install with a stable `id`
+# ("name@marketplace"); fall back to the human-readable listing on a Claude Code
+# too old for --json. Either way, a bare grep of a name would also match e.g.
+# "code-review-extras", so match the full "name@marketplace" id.
+installed_plugins="$("$CLAUDE_BIN" plugin list --json 2>/dev/null \
+  | python3 -c 'import json,sys; print("\n".join(p.get("id","") for p in json.load(sys.stdin)))' 2>/dev/null \
+  || "$CLAUDE_BIN" plugin list 2>/dev/null || true)"
 install_plugin() {  # install_plugin <name> <marketplace>
   local ref="$1@$2"
-  echo "$installed_plugins" | grep -qF "$ref" && { echo "    $ref already installed"; return 0; }
-  if "$CLAUDE_BIN" plugin install "$ref" 2>/dev/null; then
+  echo "$installed_plugins" | grep -qxF "$ref" || echo "$installed_plugins" | grep -qF " $ref" \
+    && { echo "    $ref already installed"; return 0; }
+  # --yes: a plugin with a marketplace-declared install command would otherwise
+  # wait on a y/n prompt that a cron run can never answer. No-op for
+  # the plugins below, which all install from git.
+  if "$CLAUDE_BIN" plugin install "$ref" --yes 2>/dev/null; then
     echo "    installed $ref"
   else
     warn "could not install plugin: $ref"
@@ -250,12 +263,14 @@ else
 fi
 
 # ── Playwright (Python for the skill; Node global for CloudCLI Browser) ─────
-# 26.04 isn't supported by Playwright yet (microsoft/playwright#40117); force the
-# ubuntu24.04-x64 fallback build. Guard the Chromium download so we don't re-pull
-# ~600MB every nightly run — install it only when the cache has no chromium build.
-export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64
-grep -q PLAYWRIGHT_HOST_PLATFORM_OVERRIDE /etc/environment 2>/dev/null \
-  || echo 'PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64' >> /etc/environment
+# Playwright supports Ubuntu 26.04 natively since 1.61 (microsoft/playwright#40117
+# is closed), so the old PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 hack
+# is gone. Scrub it from /etc/environment on boxes that got it from an earlier
+# release, so new installs pull the real 26.04 browser builds. Guard the Chromium
+# download so we don't re-pull ~600MB every nightly run — install it only when
+# the cache has no chromium build.
+unset PLAYWRIGHT_HOST_PLATFORM_OVERRIDE
+[ -f /etc/environment ] && sed -i '/^PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=/d' /etc/environment
 
 if ! python3 -m pip show playwright >/dev/null 2>&1; then
   log "Installing Python Playwright (webapp-testing skill)"
@@ -267,12 +282,11 @@ if ! command -v playwright >/dev/null 2>&1 && ! npm ls -g playwright >/dev/null 
   npm install -g "${NPM_QUIET[@]}" playwright || warn "global Playwright install failed"
 fi
 if ! ls -d /root/.cache/ms-playwright/chromium-* >/dev/null 2>&1; then
-  log "Downloading Chromium (ubuntu24.04-x64 build)"
+  log "Downloading Chromium"
   python3 -m playwright install --with-deps chromium \
     || python3 -m playwright install chromium \
-    || warn "Chromium download failed (retry later; 26.04 support: microsoft/playwright#40117)"
+    || warn "Chromium download failed (retry later)"
 fi
-unset PLAYWRIGHT_HOST_PLATFORM_OVERRIDE
 
 # ── /project + seed CLAUDE.md (USER-EDITABLE — written only if absent) ───────
 mkdir -p /project

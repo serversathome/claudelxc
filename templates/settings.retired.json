@@ -1,0 +1,17 @@
+{
+  "_comment": "Managed keys/values that earlier claudelxc releases wrote into /root/.claude/settings.json and that are now wrong or obsolete. merge-settings.py strips these from a box's file BEFORE applying templates/settings.json, so a removal in the template actually reaches deployed boxes (the merge otherwise only ever adds). Dicts: list the keys to delete. Lists: list the exact items to drop.",
+  "env": [
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "MAX_THINKING_TOKENS",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS"
+  ],
+  "permissions": {
+    "deny": [
+      "Read(/root/.claude/.credentials.json)",
+      "Bash(dd:*)",
+      "Bash(mkfs:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)"
+    ]
+  }
+}

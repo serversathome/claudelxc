@@ -30,8 +30,8 @@ link to the web UI on port **3001**. Open it, create a login, and start talking 
   commit-commands, frontend-design, modern-web-guidance, context7, elements-of-style,
   superpowers, language-server (LSP) plugins for TypeScript/Python/Go/Rust/C++
   (with their servers installed), and a Playwright-based webapp-testing skill.
-- **Agent teams** enabled out of the box; extended thinking is adaptive (the model thinks when
-  it helps, within a set budget).
+- **Agent teams** enabled out of the box; thinking and effort are left at the model's adaptive
+  defaults (`/effort` to change per session). Remote Control (`/rc`) works once you log in.
 
 ## It keeps itself updated
 
@@ -67,8 +67,9 @@ missing), then it self-updates every night like a fresh deploy. What's preserved
   the box's current OS (no release-upgrade — it just tracks the latest config).
 - **Merged:** managed keys in `/root/.claude/settings.json` (auto mode, the deny floor, required
   env, the curated plugins) are enforced, while anything you added — your own enabled plugins,
-  custom permissions, statusLine, hooks — is preserved. A pre-adopt copy is still saved as
-  `settings.json.pre-claudelxc`.
+  custom permissions, statusLine, hooks — is preserved. Managed entries that a newer release
+  retires (see `templates/settings.retired.json`) are removed. A pre-adopt copy is still saved
+  as `settings.json.pre-claudelxc`.
 
 Re-running is safe. Afterward, `claudelxc-doctor` should come back all-green.
 

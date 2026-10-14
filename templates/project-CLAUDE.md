@@ -10,29 +10,37 @@
 - **Languages**: Node.js (latest LTS), Python 3 (system default), Go (latest), Rust (latest)
 - **Package managers**: npm, pip (use --break-system-packages), cargo, go install
 - **Docker**: Docker Engine + Compose plugin, running and ready
-- **Web UI**: CloudCLI UI (claudecodeui) on port 3001 — chat, file explorer/editor, git, shell
+- **Web UI**: CloudCLI UI on port 3001 — chat, file explorer/editor, git, shell
 - **Search tools**: ripgrep (rg), fd-find (fdfind), fzf
 - **Databases**: PostgreSQL client (psql), Redis client (redis-cli), SQLite3
 
 ## Permissions
-Permission mode is "auto" (permissions.defaultMode). Actions are auto-approved
-but pass through a background safety classifier that still blocks catastrophic
-commands (rm -rf /, rm -rf ~). A deny floor in ~/.claude/settings.json applies in
-every mode and blocks reading credentials/secrets (.env, *.pem, id_rsa,
-.credentials.json) — do not try to work around it.
+Permission mode is "auto" (permissions.defaultMode in ~/.claude/settings.json).
+Actions are auto-approved but pass through a background safety classifier that
+still blocks catastrophic commands (rm -rf /, rm -rf ~). A deny floor in
+~/.claude/settings.json applies in every mode and blocks reading
+credentials/secrets (.env, *.pem, id_rsa, .credentials.json, ~/.claude.json,
+the CloudCLI auth DB) — do not try to work around it.
 
 ## Agent Teams
-Agent teams are enabled. You can spawn parallel teammates for complex tasks:
+Agent teams are enabled (CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; still
+experimental). You can spawn parallel teammates for complex tasks:
 - Use agent teams for work that benefits from parallel exploration
-- Use subagents (Task tool) for quick focused work that reports back
-- tmux is installed for split-pane team visualization
+- Use subagents (the Agent tool) for quick focused work that reports back
+- While teams are enabled, a *named* subagent launches as a teammate — leave
+  subagents unnamed when you just want a worker that reports back
+- Teammates run in-process by default; tmux is installed, so set
+  `"teammateMode": "auto"` in ~/.claude/settings.json for split panes
 
 ## Remote Control
-Remote Control lets you steer a live local session from the Claude mobile app or
-web. It is NOT enabled via settings.json — turn it on per session with `/rc`
-(or `claude remote-control`), or for all sessions via `/config` →
-"Enable Remote Control for all sessions". Requires a Pro/Max login (research
-preview), so it only applies once someone signs in interactively.
+Remote Control lets you continue a session running on this box from the Claude
+mobile app or claude.ai/code. Turn it on inside a session with `/remote-control`
+(`/rc`), start a session with `claude --rc`, or run `claude remote-control` as a
+headless server. To connect every session automatically, use `/config` →
+"Enable Remote Control for all sessions" (it saves `remoteControlAtStartup` in
+~/.claude/settings.json). Requires a claude.ai login (Pro/Max/Team/Enterprise;
+API keys don't work), and the first use asks a one-time y/n confirmation, so do
+it from an interactive shell.
 
 ## Docker Usage
 Docker compose files should go in /docker/<service-name>/docker-compose.yml.
@@ -45,7 +53,8 @@ All Docker containers in this LXC need `security_opt: [apparmor=unconfined]`.
 - Prefer creating files over printing long code blocks
 - Use git for version control on all projects in /project/src/
 - When installing Python packages, use: pip install --break-system-packages <package>
-- Extended thinking is always on — use it for complex architectural decisions
+- Thinking is adaptive on current models (no fixed budget is configured); use
+  `/effort` to raise or lower effort for a session
 
 ## Staying up to date
 This box self-updates from the `claudelxc` repo nightly — see `claudelxc-update`.

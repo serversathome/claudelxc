@@ -11,6 +11,7 @@ note()  { if eval "$2" >/dev/null 2>&1; then echo "  OK   $1"; else echo "  WARN
 echo "$LOG_TAG $(date '+%Y-%m-%d %H:%M:%S %Z')"
 check "claude binary present"       "command -v claude"
 check "claude reports a version"    "claude --version"
+check "settings.json is valid JSON" "python3 -m json.tool /root/.claude/settings.json"
 note  "claude logged in (creds on disk; run 'claude' /login if WARN)" "test -s /root/.claude/.credentials.json"
 check "cloudcli service active"     "systemctl is-active --quiet cloudcli"
 check "UI listening on :3001"       "ss -ltn | grep -q ':3001'"
