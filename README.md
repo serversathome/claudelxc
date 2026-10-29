@@ -14,8 +14,14 @@ Run on your **Proxmox host**, as root:
 bash <(curl -fsSL https://raw.githubusercontent.com/serversathome/claudelxc/stable/install.sh)
 ```
 
-Answer a few prompts (container ID, CPU/RAM/disk, storage, bridge, network). A few minutes later you get a
+Check the settings on one screen (container ID, CPU/RAM/disk, storage, bridge, network): pick one
+with the arrow keys and Enter to change it, then **Create**. Storage and bridge are picked from what
+your host actually has, with each storage's free space, and anything that won't work (an ID in use,
+a disk too big for the storage) is flagged before anything is created. A few minutes later you get a
 link to the web UI on port **3001**. Open it, create a login, and start talking to Claude.
+
+Prefer plain one-by-one questions? Add `--plain`:
+`bash <(curl -fsSL https://raw.githubusercontent.com/serversathome/claudelxc/stable/install.sh) --plain`
 
 ## What you get
 
