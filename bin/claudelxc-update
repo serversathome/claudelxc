@@ -81,7 +81,8 @@ echo ">>> [3/5] Claude Code + CloudCLI UI..."
 if command -v claude >/dev/null 2>&1 && claude update; then
   echo "    Claude Code: $(claude --version 2>/dev/null || echo 'version unknown')"
 else
-  curl -fsSL https://claude.ai/install.sh | bash || echo "    [WARN] Claude Code update failed"
+  # Root install is intentional here; the installer requires an explicit opt-in.
+  curl -fsSL https://claude.ai/install.sh | CLAUDE_INSTALL_ALLOW_SUDO=1 bash || echo "    [WARN] Claude Code update failed"
 fi
 npm install -g --no-fund --no-audit --loglevel=error @cloudcli-ai/cloudcli@latest || echo "    [WARN] CloudCLI UI update failed"
 # Self-heal: if the reinstall left the native addon uncompiled (npm-12 allowlist,

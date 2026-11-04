@@ -133,7 +133,9 @@ fi
 # ── Claude Code (native installer) ──────────────────────────────────────────
 if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
   log "Installing Claude Code"
-  curl -fsSL https://claude.ai/install.sh | bash || warn "Claude Code install failed"
+  # This box runs Claude as root by design (/root/.claude). The installer now
+  # refuses to run as root unless explicitly allowed, so opt in (issue #8).
+  curl -fsSL https://claude.ai/install.sh | CLAUDE_INSTALL_ALLOW_SUDO=1 bash || warn "Claude Code install failed"
 fi
 # Keep /usr/local/bin/claude pointing at the installed binary (idempotent).
 if [ -x "$HOME/.local/bin/claude" ]; then
