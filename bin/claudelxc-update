@@ -81,7 +81,8 @@ echo ">>> [3/5] Claude Code + CloudCLI UI..."
 if command -v claude >/dev/null 2>&1 && claude update; then
   echo "    Claude Code: $(claude --version 2>/dev/null || echo 'version unknown')"
 else
-  # Root install is intentional here; the installer requires an explicit opt-in.
+  # Root install is intentional here. If this was run via `sudo claudelxc-update`,
+  # the installer would stop on the sudo check without this opt-in (issue #8).
   curl -fsSL https://claude.ai/install.sh | CLAUDE_INSTALL_ALLOW_SUDO=1 bash || echo "    [WARN] Claude Code update failed"
 fi
 npm install -g --no-fund --no-audit --loglevel=error @cloudcli-ai/cloudcli@latest || echo "    [WARN] CloudCLI UI update failed"

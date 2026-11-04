@@ -15,6 +15,11 @@
 # ============================================================================
 set -uo pipefail
 export DEBIAN_FRONTEND=noninteractive
+# When install.sh is run on the Proxmox host via sudo, `pct exec` carries the
+# host's SUDO_* variables into the container. Tools here (notably Claude Code's
+# installer) then think they were run via sudo by a non-root user. We are root
+# inside the container on purpose, so drop them (issue #8).
+unset SUDO_USER SUDO_UID SUDO_GID SUDO_COMMAND
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -133,8 +138,9 @@ fi
 # ── Claude Code (native installer) ──────────────────────────────────────────
 if ! command -v claude >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/claude" ]; then
   log "Installing Claude Code"
-  # This box runs Claude as root by design (/root/.claude). The installer now
-  # refuses to run as root unless explicitly allowed, so opt in (issue #8).
+  # This box runs Claude as root by design (/root/.claude). The installer stops
+  # when it looks like it was run via sudo; the SUDO_* unset above prevents that,
+  # and this opt-in is a belt-and-braces guard (issue #8).
   curl -fsSL https://claude.ai/install.sh | CLAUDE_INSTALL_ALLOW_SUDO=1 bash || warn "Claude Code install failed"
 fi
 # Keep /usr/local/bin/claude pointing at the installed binary (idempotent).
